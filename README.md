@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 <div align="center">
 
 # 🔔 Notification Reader
@@ -271,3 +272,6 @@ This project is **100% free and open-source** — no subscriptions, no ads, no c
 Made with ❤️ for accessibility — *"Read your messages, hands-free."*
 
 </div>
+=======
+# notification_reader
+>>>>>>> a1f178ff29e21b748d8b58f5e4d2ef21fca0521c
