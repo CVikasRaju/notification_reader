@@ -19,6 +19,7 @@ A 100% free & local Android app that captures incoming notifications (WhatsApp, 
 - [Project Structure](#-project-structure)
 - [Getting Started](#-getting-started)
 - [Updating the App](#-updating-the-app)
+- [Recent Fixes](#-recent-fixes)
 - [Permissions](#-permissions)
 - [Privacy & Security](#-privacy--security)
 - [Testing](#-testing)
@@ -117,7 +118,7 @@ voice_mail_reader/
 │   └── widgets/
 │       └── app_selection_sheet.dart         # Bottom sheet with installed apps & checkboxes
 ├── test/
-│   └── widget_test.dart                     # Unit tests (model, merging, settings)
+│   └── widget_test.dart                     # Unit tests (model, merging, TTS, settings, queue)
 ├── docs/                                    # Original spec: PRD, architecture, tasks
 └── pubspec.yaml                             # Dependencies & project metadata
 ```
@@ -181,6 +182,23 @@ adb install -r build/app/outputs/flutter-apk/app-release.apk
 
 ---
 
+## 🛠 Recent Fixes
+
+- **Closed-app capture now reliably delivers messages (v1.0.1).** A runtime
+  crash in the journal-replay path meant notifications captured while the app
+  was closed were **silently discarded** on launch — the queue looked empty
+  even though the messages were visible in the notification tray. Journal
+  entries are now converted correctly before crossing the platform bridge, so
+  anything that arrives while the app is closed is replayed, filtered, and
+  queued the moment you reopen it.
+- **CI pipeline fixed.** The GitHub Actions workflow previously failed on
+  every run (an invalid `secrets` reference in a step condition) before any
+  step executed. It now runs `flutter analyze` + `flutter test`, builds the
+  release APK, and attaches it to a GitHub Release — auto-creating the release
+  for new tags when needed.
+
+---
+
 ## 🔐 Permissions
 
 The app requires a single special permission:
@@ -226,6 +244,7 @@ Coverage:
 - `NotificationItem` — spoken-text formatting (including empty-title/content fallbacks), JSON round-tripping, and `copyWith`.
 - `TtsService.effectiveRate` — language-aware speech-speed scaling (English slowed to a natural pace, Indic languages unchanged).
 - `SettingsService` — sane defaults, persistence across reloads (via encrypted storage), one-time legacy migration, whitelist toggling, and TTS-rate clamping.
+- `NotificationService` — queue manager: app-whitelist filtering, same-id conversation merging, duplicate (journal-replay) detection, retention purging, and offline-journal replay on launch.
 
 ### Manual testing on a device
 
