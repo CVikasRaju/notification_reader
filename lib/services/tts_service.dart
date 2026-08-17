@@ -53,9 +53,31 @@ class TtsService extends ChangeNotifier {
     _setStatus(TtsStatus.idle);
   }
 
-  /// Applies the playback rate (0.5x - 2.0x).
+  /// English voices run too fast through the Android engine's doubled-rate
+  /// mapping (flutter_tts 1.0 == Android 2.0). Scale English down so "1x" is a
+  /// natural pace, while Indic languages keep the user's setting unchanged.
+  static const double _englishRateScale = 0.5;
+
+  /// The engine rate to use for a language + user setting.
+  static double effectiveRate(LanguageOption language, double userRate) =>
+      language == LanguageOption.english ? userRate * _englishRateScale : userRate;
+
+  /// Applies the playback rate (0.5x - 2.0x) as-is to the engine.
   Future<void> setRate(double rate) async {
     await _tts.setSpeechRate(rate);
+  }
+
+  /// Applies the chosen language (with English fallback) and the user's speed
+  /// setting in one step, compensating for the platform rate mapping.
+  ///
+  /// Returns the language actually applied, or `null` if no language works.
+  Future<LanguageOption?> configure(
+    LanguageOption requested,
+    double userRate,
+  ) async {
+    final applied = await applyLanguage(requested);
+    await _tts.setSpeechRate(effectiveRate(applied ?? requested, userRate));
+    return applied;
   }
 
   /// Applies a language if (and only if) it is installed on the device.

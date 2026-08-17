@@ -118,8 +118,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _initTts() async {
     await tts.initialize();
-    await tts.setRate(settings.ttsRate);
-    await tts.applyLanguage(settings.language);
+    await tts.configure(settings.language, settings.ttsRate);
     if (mounted) setState(() => _initializingTts = false);
   }
 
@@ -188,8 +187,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     // Apply the user's language and speed; fall back gracefully if the
     // chosen language is not installed on the device.
-    final applied = await tts.applyLanguage(settings.language);
-    await tts.setRate(settings.ttsRate);
+    final applied = await tts.configure(settings.language, settings.ttsRate);
     if (applied != null && applied != settings.language) {
       _showSnack(
         '${settings.language.label} isn\'t installed — reading in English.',
@@ -223,8 +221,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       return;
     }
 
-    final applied = await tts.applyLanguage(settings.language);
-    await tts.setRate(settings.ttsRate);
+    final applied = await tts.configure(settings.language, settings.ttsRate);
     if (applied != null && applied != settings.language) {
       _showSnack(
         '${settings.language.label} isn\'t installed — reading in English.',
@@ -273,6 +270,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               const SizedBox(height: 12),
               _StatusBanner(
                 permissionGranted: _permissionGranted,
+                masterEnabled: settings.masterEnabled,
                 ttsStatus: tts.status,
                 initializingTts: _initializingTts,
               ),
@@ -299,7 +297,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 onLanguageChanged: (option) {
                   settings.setLanguage(option);
                   // Apply immediately so the next "Read Now" uses it.
-                  unawaited(tts.applyLanguage(option));
+                  unawaited(tts.configure(option, settings.ttsRate));
                 },
                 onRateChanged: settings.setTtsRate,
               ),
@@ -407,11 +405,13 @@ class _Header extends StatelessWidget {
 class _StatusBanner extends StatelessWidget {
   const _StatusBanner({
     required this.permissionGranted,
+    required this.masterEnabled,
     required this.ttsStatus,
     required this.initializingTts,
   });
 
   final bool? permissionGranted;
+  final bool masterEnabled;
   final TtsStatus ttsStatus;
   final bool initializingTts;
 
@@ -421,20 +421,26 @@ class _StatusBanner extends StatelessWidget {
 
     final (IconData icon, String text, Color color) = switch ((
       permissionGranted,
+      masterEnabled,
       ttsStatus,
       initializingTts,
     )) {
-      (_, TtsStatus.speaking, _) => (
+      (_, _, TtsStatus.speaking, _) => (
           Icons.graphic_eq,
           'Reading messages…',
           theme.colorScheme.tertiary,
         ),
-      (false, _, _) => (
+      (false, _, _, _) => (
           Icons.perm_device_information,
           'Notification access is off',
           theme.colorScheme.error,
         ),
-      (true, _, _) => (
+      (true, false, _, _) => (
+          Icons.power_off,
+          'Master switch is off — turn it on to capture notifications',
+          theme.colorScheme.error,
+        ),
+      (true, true, _, _) => (
           Icons.volume_up,
           'Listening for notifications',
           theme.colorScheme.primary,

@@ -48,8 +48,13 @@ class NotificationService extends ChangeNotifier {
   /// Cache of package name -> human readable app name.
   final Map<String, String> _appNameCache = <String, String>{};
 
-  /// Whether a background notification is currently being processed.
-  bool _isHandling = false;
+  /// Events waiting to be processed. Serializes handling so bursts of
+  /// notifications (WhatsApp/Instagram rapid-fire messages) are never dropped.
+  final List<ServiceNotificationEvent> _pendingEvents =
+      <ServiceNotificationEvent>[];
+
+  /// Whether the serialized event loop is currently running.
+  bool _processingEvents = false;
 
   NotificationService(this.settings);
 
@@ -75,6 +80,9 @@ class NotificationService extends ChangeNotifier {
         NotificationListenerService.notificationsStream.listen(_onEvent);
     // Pre-warm the app-name cache so queued items display friendly names.
     unawaited(_warmAppNameCache());
+    // Sweep notifications already sitting in the tray (e.g. arrived while the
+    // app was closed before the journal service bound) so they get read too.
+    unawaited(_consumeActiveNotifications());
   }
 
   /// Stops listening and releases resources.
@@ -84,20 +92,28 @@ class NotificationService extends ChangeNotifier {
     super.dispose();
   }
 
-  /// Handles a raw notification event from either the live stream or the
-  /// offline journal.
+  /// Handles a raw notification event from the live stream, the offline
+  /// journal or the tray sweep. Events are processed one at a time in arrival
+  /// order; none are dropped while another is being handled.
   Future<void> _onEvent(ServiceNotificationEvent event) async {
-    if (_isHandling) return;
-    _isHandling = true;
+    _pendingEvents.add(event);
+    if (_processingEvents) return;
+    _processingEvents = true;
     try {
-      if (event.hasRemoved) {
-        _removeById(event.packageName, event.id);
-        return;
+      while (_pendingEvents.isNotEmpty) {
+        await _handleEvent(_pendingEvents.removeAt(0));
       }
-      await _enqueue(event);
     } finally {
-      _isHandling = false;
+      _processingEvents = false;
     }
+  }
+
+  Future<void> _handleEvent(ServiceNotificationEvent event) async {
+    if (event.hasRemoved) {
+      _removeById(event.packageName, event.id);
+      return;
+    }
+    await _enqueue(event);
   }
 
   /// Adds a captured notification to the queue if it passes all filters.
@@ -238,6 +254,34 @@ class NotificationService extends ChangeNotifier {
       await _pendingChannel.invokeMethod<void>('clearPendingEvents');
     } catch (e) {
       debugPrint('Failed to clear pending journal: $e');
+    }
+  }
+
+  /// Pulls notifications already present in the notification tray when the
+  /// app opens and merges them into the queue.
+  ///
+  /// The live stream only reports *new* events, and the offline journal only
+  /// records events that arrived after the listener service bound, so without
+  /// this sweep, messages sitting in the tray when the app opens (YouTube,
+  /// LinkedIn, Phone Link, …) would never be read. Deduplication in
+  /// [_enqueue] keeps already-queued items untouched.
+  Future<void> _consumeActiveNotifications() async {
+    // The listener service connects asynchronously after launch; retry briefly
+    // so the tray is readable even on a cold start.
+    for (var attempt = 0; attempt < 5; attempt++) {
+      List<ServiceNotificationEvent> active;
+      try {
+        active = await NotificationListenerService.getActiveNotifications();
+      } catch (e) {
+        debugPrint('Active notification sweep failed (attempt '
+            '${attempt + 1}): $e');
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        continue;
+      }
+      for (final event in active) {
+        await _onEvent(event);
+      }
+      return;
     }
   }
 

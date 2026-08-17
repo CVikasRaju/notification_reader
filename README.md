@@ -44,7 +44,7 @@ Notification Reader is an **Android-exclusive** Flutter application built for ac
 | 🗓 **Retention History** | Choose how long messages stay queued: **1 Day**, **3 Days**, or **1 Week**. Older notifications are purged automatically. |
 | 📱 **Dynamic App Filter** | Browse every user-installed app (with icons and names), and check only the apps whose notifications you want read. |
 | 🌐 **Multilingual TTS** | Built-in support for **English**, **Hindi**, and **Kannada** voice models with an in-app language dropdown. |
-| ⚡ **Speech Speed Control** | Adjust playback from **0.5×** to **2.0×** (default 1.0×) with a live slider. |
+| ⚡ **Speech Speed Control** | Adjust playback from **0.5×** to **2.0×** (default 1.0×) with a live slider. English is tuned so **1×** is a natural, comfortable pace. |
 | 🔉 **Read Now Button** | A large central button with a live unread-count badge. Tapping it speaks each unread message in sequence, formatted as: <br> *"Message from [Sender] on [App Name]: [Message Content]"* |
 | 🔁 **Replay / Re-listen** | A dedicated **Replay** button re-reads *every* queued message (read or unread) so you can listen again as many times as you want. |
 | 💬 **Whole Conversation Reading** | When a contact sends several quick messages, the app merges them into one queue item instead of skipping the updates — the entire conversation is read, not just the first message. |
@@ -74,9 +74,9 @@ Notification Reader is an **Android-exclusive** Flutter application built for ac
 
 1. **Capture** — The notification listener service receives every notification posted to the system tray. While the app is open, events stream to the app instantly; while it's **closed**, they're journaled to app-private storage by a native service.
 2. **Filter** — Notifications are dropped unless the master switch is on, the posting app is whitelisted, and the notification is a real message (silent/ongoing ones like media players are skipped).
-3. **Queue** — Valid messages are stored locally, newest first, with a timestamp. The queue is persisted **encrypted at rest**, so nothing is lost if the app restarts. On launch, any journaled (closed-app) events are replayed through the exact same filters and merged in.
+3. **Queue** — Valid messages are stored locally, newest first, with a timestamp. The queue is persisted **encrypted at rest**, so nothing is lost if the app restarts. On launch, any journaled (closed-app) events are replayed through the exact same filters and merged in, and notifications already sitting in the tray (e.g. YouTube, LinkedIn, Phone Link messages that arrived earlier) are swept into the queue too — so anything on screen when you open the app gets read.
 4. **Whole conversation, not just the first message** — Messaging apps re-post the *same* notification id for each new message. Instead of skipping those updates, the app merges them into the existing queue item, so when Alice sends "hey → hello → what → why", the app reads the entire conversation.
-5. **Read** — Tapping **Read Now** applies your chosen language and speed, marks the messages as read, and speaks them one by one. **Replay** re-reads everything without changing the read state.
+5. **Read** — Tapping **Read Now** applies your chosen language and speed (English is automatically scaled to a natural pace — 1× sounds like normal speech, not rushed), marks the messages as read, and speaks them one by one. **Replay** re-reads everything without changing the read state.
 6. **Fallback** — If your chosen language's voice data isn't installed on the device, the app gracefully falls back to English and tells you.
 
 ---
@@ -165,19 +165,19 @@ flutter build apk --release
 
 ## 🔄 Updating the App
 
-This app is **not** on the Play Store, so it never auto-updates — you install new builds manually. Because every build is signed with the same debug key on this machine:
+This app is **not** on the Play Store, so it never auto-updates — you install new builds manually. Builds are signed with the project's own keystore (`android/upload-keystore.jks`), so updates install **in place** and keep your data:
 
 ```bash
-# Rebuild + install + launch the latest code on your connected phone
-flutter run
+# Rebuild the release APK (signed with the project keystore)
+flutter build apk --release
 
-# ...or just install the newest APK, keeping your data & permissions
-flutter build apk --debug
-adb install -r build/app/outputs/flutter-apk/app-debug.apk
+# Install over the existing app — settings, queue & permissions are preserved
+adb install -r build/app/outputs/flutter-apk/app-release.apk
 ```
 
-- `adb install -r` upgrades **in place** — your settings, queue, and notification access are all preserved.
-- If you ever get a **signature mismatch** error (e.g. the old app was installed from another computer), uninstall first: `adb uninstall com.voicemailreader.voice_mail_reader` (this wipes app data), then install the new APK.
+- The keystore and `key.properties` are **gitignored** — back them up privately; losing them means the app can no longer be updated for people who installed it.
+- If you ever get a **signature mismatch** error (e.g. the old app was installed from another computer or before release signing existed), uninstall first: `adb uninstall com.voicemailreader.voice_mail_reader` (this wipes app data), then install the new APK.
+- Sharing: just send `build/app/outputs/flutter-apk/app-release.apk` (≈48 MB) via WhatsApp, Drive, or a GitHub Release. Recipients install it like any APK.
 
 ---
 
@@ -207,7 +207,7 @@ The app handles denial gracefully: the status banner shows *"Notification access
 - **Android sandbox** — app storage is private; other apps cannot read the queue.
 - **No third-party trackers** — only four open-source local packages; no accounts, no analytics, no servers.
 - **User-controlled scope** — the app only sees notifications from apps you explicitly whitelist, and the permission is revocable at any time.
-- **Honest caveats** — like any on-device app, data is readable on a *rooted* phone or with physical access to an unlocked device; the app is signed with a debug key until a release keystore is configured.
+- **Honest caveats** — like any on-device app, data is readable on a *rooted* phone or with physical access to an unlocked device; the app is signed with the project's own release keystore.
 
 ---
 
@@ -217,18 +217,19 @@ The app handles denial gracefully: the status banner shows *"Notification access
 
 ```bash
 flutter analyze   # static analysis — expect "No issues found!"
-flutter test      # unit tests — 14 tests, expect "All tests passed!"
+flutter test      # unit tests — 16 tests, expect "All tests passed!"
 ```
 
 Coverage:
 
 - `mergeNotificationTexts` — conversation merging: appending, superset/subset deduplication, and length capping.
 - `NotificationItem` — spoken-text formatting (including empty-title/content fallbacks), JSON round-tripping, and `copyWith`.
+- `TtsService.effectiveRate` — language-aware speech-speed scaling (English slowed to a natural pace, Indic languages unchanged).
 - `SettingsService` — sane defaults, persistence across reloads (via encrypted storage), one-time legacy migration, whitelist toggling, and TTS-rate clamping.
 
 ### Manual testing on a device
 
-1. **Permission** — toggle the master switch → grant notification access → banner shows *"Listening for notifications"*.
+1. **Permission & master switch** — toggle the master switch on → grant notification access → the banner shows *"Listening for notifications"*. (If the master switch is off, the banner warns you instead of claiming to listen.)
 2. **Filter** — Choose apps → whitelist WhatsApp → send yourself a message from WhatsApp Web → the queue badge increments.
 3. **Whole conversation** — send several quick messages in one chat → **Read Now** reads them all ("hey. hello. what. why…"), not just the first.
 4. **Closed-app capture** — fully close the app (swipe from recents), have someone message you, reopen → the messages are waiting to be read.
@@ -243,7 +244,7 @@ Coverage:
 - **Force-stopping the app disables capture.** Swiping the app away from recents is fine (the native listener keeps journaling), but *force-stopping* it via Android settings disables its components until the app is opened again.
 - **Conversation length is capped.** Merged message text is capped at ~2,000 characters (most recent portion kept), so very long backlogs are trimmed for practical TTS playback.
 - **Language voices must be installed on the device.** Hindi and Kannada require their voice data to be downloaded via the device's TTS settings. The app detects this and falls back to English with an on-screen notice.
-- **Release builds** need a keystore configured in `android/app/build.gradle.kts` (the scaffold currently signs with debug keys).
+- **Reading happens in the app, not in the background.** While the app is closed it silently *captures* messages (native journal + tray sweep on reopen) but cannot speak them aloud — Android suspends background processes. Open the app and tap **Read Now** to hear everything that arrived.
 
 ---
 

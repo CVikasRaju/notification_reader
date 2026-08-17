@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:voice_mail_reader/models/notification_model.dart';
 import 'package:voice_mail_reader/services/settings_service.dart';
+import 'package:voice_mail_reader/services/tts_service.dart';
 
 /// In-memory fake for the flutter_secure_storage Android method channel.
 class FakeSecureStorage {
@@ -143,6 +144,21 @@ void main() {
 
       expect(item.copyWith(isRead: true).isRead, isTrue);
       expect(item.copyWith(isRead: true).title, item.title);
+    });
+  });
+
+  group('TtsService.effectiveRate', () {
+    test('English speech is scaled down so 1x is a natural pace', () {
+      expect(TtsService.effectiveRate(LanguageOption.english, 1.0), 0.5);
+      expect(TtsService.effectiveRate(LanguageOption.english, 2.0), 1.0);
+      expect(TtsService.effectiveRate(LanguageOption.english, 0.5), 0.25);
+    });
+
+    test('Indic languages keep the user rate unchanged', () {
+      expect(TtsService.effectiveRate(LanguageOption.hindi, 1.0), 1.0);
+      expect(TtsService.effectiveRate(LanguageOption.kannada, 1.5), 1.5);
+      expect(TtsService.effectiveRate(LanguageOption.hindi, 0.75), 0.75);
+      expect(TtsService.effectiveRate(LanguageOption.kannada, 0.5), 0.5);
     });
   });
 
