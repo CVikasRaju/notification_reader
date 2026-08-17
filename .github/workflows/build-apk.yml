@@ -1,0 +1,79 @@
+# Builds a release APK and attaches it to a GitHub Release.
+#
+# Triggered when a version tag (v*) is pushed, or manually from the Actions tab.
+#
+# Release signing:
+#   Add these repo secrets (Settings -> Secrets and variables -> Actions) to
+#   sign with your real keystore in CI:
+#     KEYSTORE_BASE64   - your keystore file base64-encoded, e.g.:
+#                         base64 -w 0 android/upload-keystore.jks
+#     KEYSTORE_PASSWORD - the store/key password from android/key.properties
+#     KEY_ALIAS         - the key alias (default: upload)
+#   Without secrets, the workflow still builds an APK signed with the debug
+#   key (fine for testing; not for distributing updates to others).
+
+name: Build Release APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run analyzer and tests
+        run: |
+          flutter analyze
+          flutter test
+
+      - name: Configure release signing from secrets
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > android/upload-keystore.jks
+          cat > android/key.properties <<EOF
+          storePassword=$KEYSTORE_PASSWORD
+          keyPassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=../upload-keystore.jks
+          EOF
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+      - name: Attach APK to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/app/outputs/flutter-apk/app-release.apk
