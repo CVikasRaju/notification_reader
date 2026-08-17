@@ -56,7 +56,22 @@ class NotificationService extends ChangeNotifier {
   /// Whether the serialized event loop is currently running.
   bool _processingEvents = false;
 
-  NotificationService(this.settings);
+  /// Live event stream to listen on. Defaults to the Android notification
+  /// listener's stream; injectable for tests.
+  final Stream<ServiceNotificationEvent>? _eventStream;
+
+  /// Fetcher for notifications already in the tray. Defaults to the plugin's
+  /// implementation; injectable for tests.
+  final Future<List<ServiceNotificationEvent>> Function()?
+      _activeNotificationsFetcher;
+
+  NotificationService(
+    this.settings, {
+    Stream<ServiceNotificationEvent>? eventStream,
+    Future<List<ServiceNotificationEvent>> Function()?
+        activeNotificationsFetcher,
+  })  : _eventStream = eventStream,
+        _activeNotificationsFetcher = activeNotificationsFetcher;
 
   /// Queue of captured notifications (newest first).
   List<NotificationItem> get queue => List.unmodifiable(_queue);
@@ -77,7 +92,8 @@ class NotificationService extends ChangeNotifier {
     // Replay notifications captured while the app was closed.
     await _consumePendingJournal();
     _subscription =
-        NotificationListenerService.notificationsStream.listen(_onEvent);
+        (_eventStream ?? NotificationListenerService.notificationsStream)
+            .listen(_onEvent);
     // Pre-warm the app-name cache so queued items display friendly names.
     unawaited(_warmAppNameCache());
     // Sweep notifications already sitting in the tray (e.g. arrived while the
@@ -85,8 +101,8 @@ class NotificationService extends ChangeNotifier {
     unawaited(_consumeActiveNotifications());
   }
 
-  /// Stops listening and releases resources.
-  void disposeService() {
+  @override
+  void dispose() {
     _subscription?.cancel();
     _subscription = null;
     super.dispose();
@@ -271,7 +287,9 @@ class NotificationService extends ChangeNotifier {
     for (var attempt = 0; attempt < 5; attempt++) {
       List<ServiceNotificationEvent> active;
       try {
-        active = await NotificationListenerService.getActiveNotifications();
+        active =
+            await (_activeNotificationsFetcher ??
+                NotificationListenerService.getActiveNotifications)();
       } catch (e) {
         debugPrint('Active notification sweep failed (attempt '
             '${attempt + 1}): $e');

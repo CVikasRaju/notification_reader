@@ -22,12 +22,18 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "getPendingEvents" -> {
                     val raw = prefs.getString(KEY_EVENTS, null)
-                    val events: List<Any> =
+                    val events: List<Map<String, Any?>> =
                         if (raw.isNullOrEmpty()) {
                             emptyList()
                         } else {
                             val array = JSONArray(raw)
-                            (0 until array.length()).map { array.get(it) as Map<*, *> }
+                            (0 until array.length()).map { i ->
+                                // org.json.JSONObject does not implement Map,
+                                // so the journal entries must be converted to
+                                // plain maps before crossing the channel.
+                                val obj = array.getJSONObject(i)
+                                obj.keys().asSequence().associateWith { obj.get(it) }
+                            }
                         }
                     result.success(events)
                 }

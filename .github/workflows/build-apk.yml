@@ -48,19 +48,23 @@ jobs:
           flutter test
 
       - name: Configure release signing from secrets
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        # The `secrets` context cannot be referenced inside an `if:` condition
+        # (GitHub rejects the workflow file), so guard inside the script via
+        # the environment variables instead.
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
-          echo "$KEYSTORE_BASE64" | base64 -d > android/upload-keystore.jks
-          cat > android/key.properties <<EOF
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > android/upload-keystore.jks
+            cat > android/key.properties <<EOF
           storePassword=$KEYSTORE_PASSWORD
           keyPassword=$KEYSTORE_PASSWORD
           keyAlias=$KEY_ALIAS
           storeFile=../upload-keystore.jks
           EOF
+          fi
 
       - name: Build release APK
         run: flutter build apk --release
@@ -77,9 +81,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # The APK may already be on the release (e.g. uploaded manually from a
-          # properly signed local build). Never clobber it with the CI build,
-          # which is debug-signed when the keystore secrets are not configured.
+          # GitHub does not auto-create a release for a pushed tag, so make
+          # sure one exists before uploading. Then attach the APK, but never
+          # clobber an APK already on the release (e.g. uploaded manually from
+          # a properly signed local build) with the CI build, which is
+          # debug-signed when the keystore secrets are not configured.
+          if ! gh api \
+              "repos/${{ github.repository }}/releases/tags/$GITHUB_REF_NAME" \
+              >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" \
+              --repo "${{ github.repository }}" --generate-notes
+          fi
           if gh api \
               "repos/${{ github.repository }}/releases/tags/$GITHUB_REF_NAME" \
               --jq '.assets[].name' 2>/dev/null | grep -qx 'app-release.apk'; then

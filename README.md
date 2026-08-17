@@ -217,7 +217,7 @@ The app handles denial gracefully: the status banner shows *"Notification access
 
 ```bash
 flutter analyze   # static analysis — expect "No issues found!"
-flutter test      # unit tests — 16 tests, expect "All tests passed!"
+flutter test      # unit tests — 21 tests, expect "All tests passed!"
 ```
 
 Coverage:
