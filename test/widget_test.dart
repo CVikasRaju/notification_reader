@@ -71,6 +71,25 @@ void main() {
       expect(mergeNotificationTexts('', ''), '');
     });
 
+    test('short repeated message is appended, not dropped', () {
+      // "ok" already appeared in the conversation, but this is a genuinely new
+      // message — it must not be silently discarded.
+      expect(mergeNotificationTexts('hey. ok', 'ok'), 'hey. ok. ok');
+    });
+
+    test('substring that is not a strict prefix/suffix is appended', () {
+      // "world" is a substring of "hello world" but not a prefix/suffix
+      // relationship that indicates a conversation superset.
+      expect(
+        mergeNotificationTexts('hello world', 'world'),
+        'hello world. world',
+      );
+    });
+
+    test('equal-length different messages are appended', () {
+      expect(mergeNotificationTexts('yes', 'nah'), 'yes. nah');
+    });
+
     test('caps accumulated text at the maximum length, keeping the tail', () {
       final big = 'a' * 1500;
       final merged = mergeNotificationTexts(big, 'b' * 1500);

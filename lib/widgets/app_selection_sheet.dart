@@ -225,7 +225,7 @@ class _AppIcon extends StatelessWidget {
     );
     if (icon == null) return fallback;
     return CircleAvatar(
-      backgroundImage: MemoryImage(icon as Uint8List),
+      backgroundImage: MemoryImage(icon!),
       onBackgroundImageError: (_, _) {},
       child: const SizedBox.shrink(),
     );

@@ -93,7 +93,12 @@ class NotificationService extends ChangeNotifier {
     await _consumePendingJournal();
     _subscription =
         (_eventStream ?? NotificationListenerService.notificationsStream)
-            .listen(_onEvent);
+            .listen(
+      _onEvent,
+      onError: (Object error) {
+        debugPrint('Notification stream error: $error');
+      },
+    );
     // Pre-warm the app-name cache so queued items display friendly names.
     unawaited(_warmAppNameCache());
     // Sweep notifications already sitting in the tray (e.g. arrived while the
@@ -187,8 +192,8 @@ class NotificationService extends ChangeNotifier {
     final existing = _queue[existingIndex];
     final incoming = event.content.trim();
 
-    // No genuinely new text -> duplicate or subset, keep the item untouched.
-    if (incoming.isEmpty || existing.content.contains(incoming)) return;
+    // No genuinely new text -> exact duplicate (journal replay), keep untouched.
+    if (incoming.isEmpty || existing.content == incoming) return;
 
     final updated = existing.copyWith(
       title: event.title.trim().isNotEmpty ? event.title.trim() : existing.title,

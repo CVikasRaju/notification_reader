@@ -23,9 +23,18 @@ String mergeNotificationTexts(String existing, String incoming) {
   final addition = incoming.trim();
   if (addition.isEmpty) return base;
   if (base.isEmpty) return addition;
-  if (base.contains(addition) || addition.contains(base)) {
-    // Same or overlapping text (e.g. a journal replay) -> keep the longer.
-    return addition.length >= base.length ? addition : base;
+  // Exact replay (e.g. journal re-delivering the same event) — no change.
+  if (base == addition) return base;
+  // Messaging apps re-post the full conversation with new text appended at
+  // the end, so the incoming text strictly starts with the existing base. If
+  // so, the incoming is a superset — use it. Conversely, if the base already
+  // starts with the incoming text, the incoming is a stale shorter version
+  // (e.g. a journal replay of an earlier event) — keep the base.
+  if (addition.length > base.length && addition.startsWith(base)) {
+    return addition;
+  }
+  if (base.length > addition.length && base.startsWith(addition)) {
+    return base;
   }
   final merged = '$base. $addition';
   if (merged.length <= maxNotificationContentLength) return merged;

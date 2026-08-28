@@ -75,6 +75,7 @@ class TtsService extends ChangeNotifier {
     LanguageOption requested,
     double userRate,
   ) async {
+    if (!_initialized) return null;
     final applied = await applyLanguage(requested);
     await _tts.setSpeechRate(effectiveRate(applied ?? requested, userRate));
     return applied;
