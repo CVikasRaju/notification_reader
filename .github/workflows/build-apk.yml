@@ -20,9 +20,14 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -76,28 +81,18 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
 
-      - name: Attach APK to GitHub Release (skip if already uploaded)
+      - name: Attach APK to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # GitHub does not auto-create a release for a pushed tag, so make
-          # sure one exists before uploading. Then attach the APK, but never
-          # clobber an APK already on the release (e.g. uploaded manually from
-          # a properly signed local build) with the CI build, which is
-          # debug-signed when the keystore secrets are not configured.
-          if ! gh api \
-              "repos/${{ github.repository }}/releases/tags/$GITHUB_REF_NAME" \
-              >/dev/null 2>&1; then
+          if ! gh release view "$GITHUB_REF_NAME" --repo "${{ github.repository }}" >/dev/null 2>&1; then
             gh release create "$GITHUB_REF_NAME" \
-              --repo "${{ github.repository }}" --generate-notes
+              --repo "${{ github.repository }}" \
+              --title "Release $GITHUB_REF_NAME" \
+              --generate-notes
           fi
-          if gh api \
-              "repos/${{ github.repository }}/releases/tags/$GITHUB_REF_NAME" \
-              --jq '.assets[].name' 2>/dev/null | grep -qx 'app-release.apk'; then
-            echo 'app-release.apk already exists on the release; skipping upload.'
-          else
-            gh release upload "$GITHUB_REF_NAME" \
-              build/app/outputs/flutter-apk/app-release.apk \
-              --repo "${{ github.repository }}"
-          fi
+          gh release upload "$GITHUB_REF_NAME" \
+            build/app/outputs/flutter-apk/app-release.apk \
+            --repo "${{ github.repository }}" \
+            --clobber
