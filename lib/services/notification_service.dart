@@ -106,6 +106,14 @@ class NotificationService extends ChangeNotifier {
     unawaited(_consumeActiveNotifications());
   }
 
+  /// Re-sweeps notifications currently sitting in the system tray and consumes
+  /// any offline pending journal entries. Called on app launch and resume.
+  Future<void> refreshFromTray() async {
+    purgeExpired();
+    await _consumePendingJournal();
+    await _consumeActiveNotifications();
+  }
+
   @override
   void dispose() {
     _subscription?.cancel();
@@ -289,7 +297,7 @@ class NotificationService extends ChangeNotifier {
   Future<void> _consumeActiveNotifications() async {
     // The listener service connects asynchronously after launch; retry briefly
     // so the tray is readable even on a cold start.
-    for (var attempt = 0; attempt < 5; attempt++) {
+    for (var attempt = 0; attempt < 8; attempt++) {
       List<ServiceNotificationEvent> active;
       try {
         active =
@@ -298,7 +306,7 @@ class NotificationService extends ChangeNotifier {
       } catch (e) {
         debugPrint('Active notification sweep failed (attempt '
             '${attempt + 1}): $e');
-        await Future<void>.delayed(const Duration(milliseconds: 500));
+        await Future<void>.delayed(const Duration(milliseconds: 600));
         continue;
       }
       for (final event in active) {

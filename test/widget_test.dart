@@ -172,13 +172,10 @@ void main() {
   });
 
   group('TtsService.effectiveRate', () {
-    test('English speech is scaled down so 1x is a natural pace', () {
-      expect(TtsService.effectiveRate(LanguageOption.english, 1.0), 0.5);
-      expect(TtsService.effectiveRate(LanguageOption.english, 2.0), 1.0);
-      expect(TtsService.effectiveRate(LanguageOption.english, 0.5), 0.25);
-    });
-
-    test('Indic languages keep the user rate unchanged', () {
+    test('all languages use the user selected rate directly', () {
+      expect(TtsService.effectiveRate(LanguageOption.english, 1.0), 1.0);
+      expect(TtsService.effectiveRate(LanguageOption.english, 2.0), 2.0);
+      expect(TtsService.effectiveRate(LanguageOption.english, 0.5), 0.5);
       expect(TtsService.effectiveRate(LanguageOption.hindi, 1.0), 1.0);
       expect(TtsService.effectiveRate(LanguageOption.kannada, 1.5), 1.5);
       expect(TtsService.effectiveRate(LanguageOption.hindi, 0.75), 0.75);

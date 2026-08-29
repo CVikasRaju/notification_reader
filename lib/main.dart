@@ -101,12 +101,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  /// Refreshes permission state whenever the app regains focus, so returning
-  /// from the Android settings screen is picked up immediately.
+  /// Refreshes permission state and sweeps any incoming notifications whenever
+  /// the app regains focus (e.g. returning from background or system settings).
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _refreshPermission();
+      unawaited(notifications.refreshFromTray());
     }
   }
 
@@ -299,7 +300,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   // Apply immediately so the next "Read Now" uses it.
                   unawaited(tts.configure(option, settings.ttsRate));
                 },
-                onRateChanged: settings.setTtsRate,
+                onRateChanged: (rate) {
+                  settings.setTtsRate(rate);
+                  unawaited(tts.configure(settings.language, rate));
+                },
               ),
               const SizedBox(height: 12),
               _ActionCard(
